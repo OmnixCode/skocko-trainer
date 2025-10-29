@@ -2,15 +2,26 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Skočko 5th Move Trainer (Unique Solution)</title>
+<title>Skočko 5th Move Trainer (Unique Solution + Controls)</title>
 <style>
   body { font-family: sans-serif; padding: 20px; }
-  select { font-size: 20px; margin-right: 5px; }
-  .attempt { margin-bottom: 5px; }
+  select, input { font-size: 18px; margin: 2px; }
+  .attempt { margin-bottom: 10px; }
+  .controls { margin-top: 20px; }
 </style>
 </head>
 <body>
 <h1>Skočko 5th Move Trainer (Unique Solution)</h1>
+
+<div id="controls" class="controls">
+  <button onclick="initGame()">Refresh Game</button>
+  <button onclick="revealSolution()">Show Solution</button>
+</div>
+
+<div id="attemptSelectors" class="controls">
+  <p>Set max Red/White for each attempt:</p>
+  <div id="maxSelectors"></div>
+</div>
 
 <div id="attempts"></div>
 
@@ -27,15 +38,23 @@
 const symbols = ['S','♥','♦','♣','★','○'];
 const L = 4;
 
-// Fill dropdowns
-for(let i=0;i<L;i++){
-  const sel = document.getElementById('g'+i);
-  symbols.forEach(sym=>{
-    const opt = document.createElement('option');
-    opt.value = sym;
-    opt.textContent = sym;
-    sel.appendChild(opt);
-  });
+let secret = [];
+let attempts = [];
+let possibleSolutions = [];
+let maxSettings = [];
+
+// Fill dropdowns for 5th guess
+function fillGuessDropdowns(){
+  for(let i=0;i<L;i++){
+    const sel = document.getElementById('g'+i);
+    sel.innerHTML = '';
+    symbols.forEach(sym=>{
+      const opt = document.createElement('option');
+      opt.value = sym;
+      opt.textContent = sym;
+      sel.appendChild(opt);
+    });
+  }
 }
 
 // Function to compute red/white points
@@ -73,17 +92,7 @@ function allCombinations(symbols, L){
   return result;
 }
 
-// Pick secret combination randomly
-let secret = [];
-for(let i=0;i<L;i++){
-  secret.push(symbols[Math.floor(Math.random()*symbols.length)]);
-}
-
-// Generate 4 previous attempts with unique solution guarantee
-let attempts = [];
-let possibleSolutions = allCombinations(symbols, L);
-
-// Function to filter solution space
+// Filter solution space
 function filterSolutions(attempt, rw){
   possibleSolutions = possibleSolutions.filter(sol=>{
     let [r,w] = scoreGuess(sol, attempt);
@@ -91,33 +100,57 @@ function filterSolutions(attempt, rw){
   });
 }
 
-// Try generating attempts
-while(attempts.length < 4){
+// Generate single attempt with optional max red/white
+function generateCandidate(maxRed, maxWhite){
   let candidate = [];
   for(let i=0;i<L;i++){
     candidate.push(symbols[Math.floor(Math.random()*symbols.length)]);
   }
-  // score against secret
-  let rw = scoreGuess(secret, candidate);
-  // temporarily filter solution space to see if it keeps at least 1 solution
-  let filtered = possibleSolutions.filter(sol=>{
-    let [r,w] = scoreGuess(sol, candidate);
-    return r===rw[0] && w===rw[1];
-  });
-  if(filtered.length > 0){ // safe to add
-    attempts.push([candidate, rw]);
-    filterSolutions(candidate, rw);
+  let [r,w] = scoreGuess(secret, candidate);
+  let tries = 0;
+  while((r>maxRed || w>maxWhite) && tries<50){
+    let pos = Math.floor(Math.random()*L);
+    let randSym;
+    do { randSym = symbols[Math.floor(Math.random()*symbols.length)]; } while(randSym===candidate[pos]);
+    candidate[pos] = randSym;
+    [r,w] = scoreGuess(secret, candidate);
+    tries++;
+  }
+  return [candidate, [r,w]];
+}
+
+// Generate 4 attempts with max red/white and unique solution
+function generateAttempts(){
+  attempts = [];
+  possibleSolutions = allCombinations(symbols,L);
+
+  for(let i=0;i<4;i++){
+    let candidate, rw, filtered;
+    let tries = 0;
+    do {
+      [candidate, rw] = generateCandidate(maxSettings[i].red, maxSettings[i].white);
+      filtered = possibleSolutions.filter(sol=>{
+        let [r,w] = scoreGuess(sol, candidate);
+        return r===rw[0] && w===rw[1];
+      });
+      tries++;
+    } while(filtered.length===0 && tries<100);
+    attempts.push([candidate,rw]);
+    filterSolutions(candidate,rw);
   }
 }
 
 // Display attempts
-const attemptsDiv = document.getElementById('attempts');
-attempts.forEach((att,i)=>{
-  const div = document.createElement('div');
-  div.className = 'attempt';
-  div.textContent = `Attempt ${i+1}: ${att[0].join(' ')} → Red: ${att[1][0]}, White: ${att[1][1]}`;
-  attemptsDiv.appendChild(div);
-});
+function displayAttempts(){
+  const attemptsDiv = document.getElementById('attempts');
+  attemptsDiv.innerHTML = '';
+  attempts.forEach((att,i)=>{
+    const div = document.createElement('div');
+    div.className = 'attempt';
+    div.textContent = `Attempt ${i+1}: ${att[0].join(' ')} → Red: ${att[1][0]}, White: ${att[1][1]}`;
+    attemptsDiv.appendChild(div);
+  });
+}
 
 // Check 5th guess
 function checkGuess(){
@@ -132,7 +165,52 @@ function checkGuess(){
   }
 }
 
-console.log('Secret combo (for debugging):', secret);
+// Reveal solution
+function revealSolution(){
+  document.getElementById('result').textContent = `💡 Secret: ${secret.join(' ')}`;
+}
+
+// Initialize max red/white selectors
+function initMaxSelectors(){
+  const maxSelectorsDiv = document.getElementById('maxSelectors');
+  maxSelectorsDiv.innerHTML = '';
+  maxSettings = [];
+  for(let i=0;i<4;i++){
+    const div = document.createElement('div');
+    div.innerHTML = `Attempt ${i+1} → Max Red: <select id="red${i}"></select> Max White: <select id="white${i}"></select>`;
+    maxSelectorsDiv.appendChild(div);
+    const redSel = document.getElementById(`red${i}`);
+    const whiteSel = document.getElementById(`white${i}`);
+    for(let v=0;v<=L;v++){
+      let optR = document.createElement('option'); optR.value=v; optR.textContent=v; redSel.appendChild(optR);
+      let optW = document.createElement('option'); optW.value=v; optW.textContent=v; whiteSel.appendChild(optW);
+    }
+    maxSettings.push({red:2, white:2});
+    redSel.value=2; whiteSel.value=2;
+    // Update maxSettings when changed
+    redSel.onchange = ()=>{ maxSettings[i].red = parseInt(redSel.value); initGame(); };
+    whiteSel.onchange = ()=>{ maxSettings[i].white = parseInt(whiteSel.value); initGame(); };
+  }
+}
+
+// Initialize the game
+function initGame(){
+  fillGuessDropdowns();
+  // Generate secret
+  secret = [];
+  for(let i=0;i<L;i++){
+    secret.push(symbols[Math.floor(Math.random()*symbols.length)]);
+  }
+  generateAttempts();
+  displayAttempts();
+  document.getElementById('result').textContent = '';
+  console.log('Secret combo (for debugging):', secret);
+}
+
+// Initialize max selectors and start game
+initMaxSelectors();
+initGame();
+
 </script>
 </body>
 </html>
