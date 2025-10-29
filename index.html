@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Skočko 5th Move Trainer (Unique Solution)</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  select { font-size: 20px; margin-right: 5px; }
+  .attempt { margin-bottom: 5px; }
+</style>
+</head>
+<body>
+<h1>Skočko 5th Move Trainer (Unique Solution)</h1>
+
+<div id="attempts"></div>
+
+<h3>Guess the 5th move:</h3>
+<select id="g0"></select>
+<select id="g1"></select>
+<select id="g2"></select>
+<select id="g3"></select>
+<button onclick="checkGuess()">Check</button>
+
+<p id="result"></p>
+
+<script>
+const symbols = ['S','♥','♦','♣','★','○'];
+const L = 4;
+
+// Fill dropdowns
+for(let i=0;i<L;i++){
+  const sel = document.getElementById('g'+i);
+  symbols.forEach(sym=>{
+    const opt = document.createElement('option');
+    opt.value = sym;
+    opt.textContent = sym;
+    sel.appendChild(opt);
+  });
+}
+
+// Function to compute red/white points
+function scoreGuess(secret, guess){
+  let red = 0;
+  let secRem = [], gueRem = [];
+  for(let i=0;i<L;i++){
+    if(secret[i]==guess[i]) red++;
+    else { secRem.push(secret[i]); gueRem.push(guess[i]); }
+  }
+  let white = 0;
+  secRem.forEach(s=>{
+    let index = gueRem.indexOf(s);
+    if(index>=0){
+      white++;
+      gueRem.splice(index,1);
+    }
+  });
+  return [red, white];
+}
+
+// Generate all possible combinations (solution space)
+function allCombinations(symbols, L){
+  let result = [];
+  function helper(prefix){
+    if(prefix.length===L){
+      result.push(prefix);
+      return;
+    }
+    symbols.forEach(s=>{
+      helper(prefix.concat(s));
+    });
+  }
+  helper([]);
+  return result;
+}
+
+// Pick secret combination randomly
+let secret = [];
+for(let i=0;i<L;i++){
+  secret.push(symbols[Math.floor(Math.random()*symbols.length)]);
+}
+
+// Generate 4 previous attempts with unique solution guarantee
+let attempts = [];
+let possibleSolutions = allCombinations(symbols, L);
+
+// Function to filter solution space
+function filterSolutions(attempt, rw){
+  possibleSolutions = possibleSolutions.filter(sol=>{
+    let [r,w] = scoreGuess(sol, attempt);
+    return r===rw[0] && w===rw[1];
+  });
+}
+
+// Try generating attempts
+while(attempts.length < 4){
+  let candidate = [];
+  for(let i=0;i<L;i++){
+    candidate.push(symbols[Math.floor(Math.random()*symbols.length)]);
+  }
+  // score against secret
+  let rw = scoreGuess(secret, candidate);
+  // temporarily filter solution space to see if it keeps at least 1 solution
+  let filtered = possibleSolutions.filter(sol=>{
+    let [r,w] = scoreGuess(sol, candidate);
+    return r===rw[0] && w===rw[1];
+  });
+  if(filtered.length > 0){ // safe to add
+    attempts.push([candidate, rw]);
+    filterSolutions(candidate, rw);
+  }
+}
+
+// Display attempts
+const attemptsDiv = document.getElementById('attempts');
+attempts.forEach((att,i)=>{
+  const div = document.createElement('div');
+  div.className = 'attempt';
+  div.textContent = `Attempt ${i+1}: ${att[0].join(' ')} → Red: ${att[1][0]}, White: ${att[1][1]}`;
+  attemptsDiv.appendChild(div);
+});
+
+// Check 5th guess
+function checkGuess(){
+  let guess = [];
+  for(let i=0;i<L;i++){
+    guess.push(document.getElementById('g'+i).value);
+  }
+  if(guess.join('') === secret.join('')){
+    document.getElementById('result').textContent = '✅ Correct! You found the 5th move!';
+  } else {
+    document.getElementById('result').textContent = `❌ Incorrect. Secret was: ${secret.join(' ')}`;
+  }
+}
+
+console.log('Secret combo (for debugging):', secret);
+</script>
+</body>
+</html>
