@@ -1,216 +1,233 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Skočko 5th Move Trainer (Unique Solution + Controls)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skočko 5th Move Trainer</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { font-family: sans-serif; padding: 20px; }
-  select, input { font-size: 18px; margin: 2px; }
-  .attempt { margin-bottom: 10px; }
-  .controls { margin-top: 20px; }
+  .dot {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    margin-left: 2px;
+  }
+  .dot.red { background-color: #ef4444; }    /* Tailwind red-500 */
+  .dot.yellow { background-color: #facc15; } /* Tailwind yellow-400 */
 </style>
 </head>
-<body>
-<h1>Skočko 5th Move Trainer (Unique Solution)</h1>
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen flex flex-col items-center p-4 text-gray-800">
 
-<div id="controls" class="controls">
-  <button onclick="initGame()">Refresh Game</button>
-  <button onclick="revealSolution()">Show Solution</button>
+<div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-6">
+  <h1 class="text-2xl font-bold mb-4 text-center text-indigo-600">Skočko 5th Move Trainer</h1>
+
+  <!-- Controls -->
+  <div class="space-y-3 mb-5">
+    <div class="flex flex-wrap justify-center gap-2 items-center">
+      <label class="font-medium">Max Reds:</label>
+      <select id="maxRed" class="border rounded px-2 py-1 text-lg">
+        <option value="4">4</option><option value="3">3</option>
+        <option value="2" selected>2</option><option value="1">1</option><option value="0">0</option>
+      </select>
+
+      <label class="font-medium">Max Yellows:</label>
+      <select id="maxYellow" class="border rounded px-2 py-1 text-lg">
+        <option value="4">4</option><option value="3">3</option>
+        <option value="2" selected>2</option><option value="1">1</option><option value="0">0</option>
+      </select>
+    </div>
+
+    <label class="flex items-center justify-center gap-2 text-sm">
+      <input type="checkbox" id="strictMode" class="scale-125 accent-indigo-500">
+      <span>Strict mode</span>
+    </label>
+
+    <div class="flex flex-wrap justify-center gap-2">
+      <button onclick="generateGame()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium">New Game</button>
+      <button onclick="showSecret()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Show Solution</button>
+      <button onclick="checkAllSolutions()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Check All</button>
+    </div>
+  </div>
+
+  <!-- Attempts -->
+  <div id="attempts" class="text-sm space-y-1 mb-4"></div>
+
+  <!-- Guess -->
+  <h3 class="text-lg font-semibold mb-2 text-center">Guess the 5th Move:</h3>
+  <div class="flex justify-center gap-2 mb-3">
+    <select id="g0" class="border rounded-lg text-xl px-2 py-1"></select>
+    <select id="g1" class="border rounded-lg text-xl px-2 py-1"></select>
+    <select id="g2" class="border rounded-lg text-xl px-2 py-1"></select>
+    <select id="g3" class="border rounded-lg text-xl px-2 py-1"></select>
+  </div>
+  <div class="text-center">
+    <button onclick="checkGuess()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium">Check</button>
+  </div>
+
+  <!-- Result -->
+  <p id="result" class="mt-3 text-center text-lg font-semibold"></p>
+
+  <!-- Possible List -->
+  <pre id="possibleList" class="text-xs bg-gray-100 rounded-lg p-2 mt-3 overflow-x-auto max-h-48"></pre>
 </div>
-
-<div id="attemptSelectors" class="controls">
-  <p>Set max Red/White for each attempt:</p>
-  <div id="maxSelectors"></div>
-</div>
-
-<div id="attempts"></div>
-
-<h3>Guess the 5th move:</h3>
-<select id="g0"></select>
-<select id="g1"></select>
-<select id="g2"></select>
-<select id="g3"></select>
-<button onclick="checkGuess()">Check</button>
-
-<p id="result"></p>
 
 <script>
-const symbols = ['S','♥','♦','♣','★','○'];
+const symbols = ['S','♥','♦','♣','★','♠'];
 const L = 4;
 
-let secret = [];
-let attempts = [];
-let possibleSolutions = [];
-let maxSettings = [];
-
-// Fill dropdowns for 5th guess
-function fillGuessDropdowns(){
-  for(let i=0;i<L;i++){
-    const sel = document.getElementById('g'+i);
-    sel.innerHTML = '';
-    symbols.forEach(sym=>{
-      const opt = document.createElement('option');
-      opt.value = sym;
-      opt.textContent = sym;
-      sel.appendChild(opt);
-    });
-  }
+// Populate dropdowns
+for(let i=0;i<L;i++){
+  const sel = document.getElementById('g'+i);
+  symbols.forEach(sym=>{
+    const opt = document.createElement('option');
+    opt.value = sym;
+    opt.textContent = sym;
+    sel.appendChild(opt);
+  });
 }
 
-// Function to compute red/white points
+// Score function
 function scoreGuess(secret, guess){
-  let red = 0;
-  let secRem = [], gueRem = [];
+  let r=0, y=0;
+  let secRem=[], gueRem=[];
   for(let i=0;i<L;i++){
-    if(secret[i]==guess[i]) red++;
+    if(secret[i] === guess[i]) r++;
     else { secRem.push(secret[i]); gueRem.push(guess[i]); }
   }
-  let white = 0;
   secRem.forEach(s=>{
-    let index = gueRem.indexOf(s);
-    if(index>=0){
-      white++;
-      gueRem.splice(index,1);
-    }
+    let idx = gueRem.indexOf(s);
+    if(idx>=0){ y++; gueRem.splice(idx,1); }
   });
-  return [red, white];
+  return [r,y];
 }
 
-// Generate all possible combinations (solution space)
-function allCombinations(symbols, L){
-  let result = [];
+// Generate all combinations
+function allCombinations(){
+  const res=[];
   function helper(prefix){
-    if(prefix.length===L){
-      result.push(prefix);
-      return;
-    }
-    symbols.forEach(s=>{
-      helper(prefix.concat(s));
-    });
+    if(prefix.length===L){ res.push(prefix); return; }
+    symbols.forEach(s=>helper(prefix.concat(s)));
   }
   helper([]);
-  return result;
+  return res;
 }
 
-// Filter solution space
-function filterSolutions(attempt, rw){
-  possibleSolutions = possibleSolutions.filter(sol=>{
-    let [r,w] = scoreGuess(sol, attempt);
-    return r===rw[0] && w===rw[1];
+let secret=[], attempts=[];
+
+function filterSolutions(attempt,rw,solutions){
+  return solutions.filter(sol=>{
+    const [r,y] = scoreGuess(sol,attempt);
+    return r===rw[0] && y===rw[1];
   });
 }
 
-// Generate single attempt with optional max red/white
-function generateCandidate(maxRed, maxWhite){
-  let candidate = [];
-  for(let i=0;i<L;i++){
-    candidate.push(symbols[Math.floor(Math.random()*symbols.length)]);
-  }
-  let [r,w] = scoreGuess(secret, candidate);
-  let tries = 0;
-  while((r>maxRed || w>maxWhite) && tries<50){
-    let pos = Math.floor(Math.random()*L);
-    let randSym;
-    do { randSym = symbols[Math.floor(Math.random()*symbols.length)]; } while(randSym===candidate[pos]);
-    candidate[pos] = randSym;
-    [r,w] = scoreGuess(secret, candidate);
-    tries++;
-  }
-  return [candidate, [r,w]];
-}
+// Generate game (strict or relaxed)
+function generateGame(){
+  const maxRed = parseInt(document.getElementById('maxRed').value);
+  const maxYellow = parseInt(document.getElementById('maxYellow').value);
+  const strict = document.getElementById('strictMode').checked;
+  const all = allCombinations();
 
-// Generate 4 attempts with max red/white and unique solution
-function generateAttempts(){
   attempts = [];
-  possibleSolutions = allCombinations(symbols,L);
+  let success=false;
 
-  for(let i=0;i<4;i++){
-    let candidate, rw, filtered;
-    let tries = 0;
-    do {
-      [candidate, rw] = generateCandidate(maxSettings[i].red, maxSettings[i].white);
-      filtered = possibleSolutions.filter(sol=>{
-        let [r,w] = scoreGuess(sol, candidate);
-        return r===rw[0] && w===rw[1];
-      });
-      tries++;
-    } while(filtered.length===0 && tries<100);
-    attempts.push([candidate,rw]);
-    filterSolutions(candidate,rw);
-  }
-}
+  while(!success){
+    // Pick secret randomly
+    secret = [];
+    for(let i=0;i<L;i++) secret.push(symbols[Math.floor(Math.random()*symbols.length)]);
 
-// Display attempts
-function displayAttempts(){
-  const attemptsDiv = document.getElementById('attempts');
-  attemptsDiv.innerHTML = '';
-  attempts.forEach((att,i)=>{
-    const div = document.createElement('div');
-    div.className = 'attempt';
-    div.textContent = `Attempt ${i+1}: ${att[0].join(' ')} → Red: ${att[1][0]}, White: ${att[1][1]}`;
-    attemptsDiv.appendChild(div);
-  });
-}
+    let possible=[...all];
+    attempts=[];
 
-// Check 5th guess
-function checkGuess(){
-  let guess = [];
-  for(let i=0;i<L;i++){
-    guess.push(document.getElementById('g'+i).value);
-  }
-  if(guess.join('') === secret.join('')){
-    document.getElementById('result').textContent = '✅ Correct! You found the 5th move!';
-  } else {
-    document.getElementById('result').textContent = `❌ Incorrect. Secret was: ${secret.join(' ')}`;
-  }
-}
+    const relaxLimit = strict ? 0 : 5;
 
-// Reveal solution
-function revealSolution(){
-  document.getElementById('result').textContent = `💡 Secret: ${secret.join(' ')}`;
-}
+    let relax=0;
+    while(relax <= relaxLimit){
+      possible=[...all];
+      attempts=[];
+      let failed=false;
 
-// Initialize max red/white selectors
-function initMaxSelectors(){
-  const maxSelectorsDiv = document.getElementById('maxSelectors');
-  maxSelectorsDiv.innerHTML = '';
-  maxSettings = [];
-  for(let i=0;i<4;i++){
-    const div = document.createElement('div');
-    div.innerHTML = `Attempt ${i+1} → Max Red: <select id="red${i}"></select> Max White: <select id="white${i}"></select>`;
-    maxSelectorsDiv.appendChild(div);
-    const redSel = document.getElementById(`red${i}`);
-    const whiteSel = document.getElementById(`white${i}`);
-    for(let v=0;v<=L;v++){
-      let optR = document.createElement('option'); optR.value=v; optR.textContent=v; redSel.appendChild(optR);
-      let optW = document.createElement('option'); optW.value=v; optW.textContent=v; whiteSel.appendChild(optW);
+      for(let step=0; step<4; step++){
+        let candidates=[];
+        // Generate candidate attempts
+        for(let t=0;t<300;t++){
+          let cand=[];
+          for(let i=0;i<L;i++) cand.push(symbols[Math.floor(Math.random()*symbols.length)]);
+          const [r,y] = scoreGuess(secret,cand);
+
+          if(r <= maxRed + relax && y <= maxYellow + relax){
+            let filtered = filterSolutions(cand,[r,y],possible);
+            if(filtered.length>0) candidates.push([cand,[r,y]]);
+          }
+        }
+
+        if(candidates.length===0){
+          failed=true;
+          break;
+        }
+
+        // Pick random candidate
+        let choice = candidates[Math.floor(Math.random()*candidates.length)];
+        attempts.push(choice);
+        possible = filterSolutions(choice[0],choice[1],possible);
+      }
+
+      if(!failed && possible.length===1){
+        success=true;
+        break;
+      }
+
+      relax++;
     }
-    maxSettings.push({red:2, white:2});
-    redSel.value=2; whiteSel.value=2;
-    // Update maxSettings when changed
-    redSel.onchange = ()=>{ maxSettings[i].red = parseInt(redSel.value); initGame(); };
-    whiteSel.onchange = ()=>{ maxSettings[i].white = parseInt(whiteSel.value); initGame(); };
+  }
+
+  // Display
+  const div = document.getElementById('attempts');
+  div.innerHTML='';
+  attempts.forEach((a,i)=>{
+    const [r,y] = a[1];
+    const row = document.createElement('div');
+    row.className='attempt flex justify-between items-center border-b py-1';
+    let dots='';
+    for(let k=0;k<r;k++) dots+='<span class="dot red"></span>';
+    for(let k=0;k<y;k++) dots+='<span class="dot yellow"></span>';
+    row.innerHTML=`
+      <div class="font-semibold w-20">Try ${i+1}:</div>
+      <div class="flex-1 text-center text-lg tracking-wider">${a[0].join(' ')}</div>
+      <div class="flex justify-end w-20">${dots}</div>`;
+    div.appendChild(row);
+  });
+
+  document.getElementById('result').textContent='';
+  document.getElementById('possibleList').textContent='';
+  console.log("Secret:",secret);
+}
+
+function checkGuess(){
+  let g=[];
+  for(let i=0;i<L;i++) g.push(document.getElementById('g'+i).value);
+  if(g.join('')===secret.join('')){
+    document.getElementById('result').textContent='✅ Correct! You found the 5th move!';
+  } else {
+    document.getElementById('result').textContent=`❌ Wrong. Secret was: ${secret.join(' ')}`;
   }
 }
 
-// Initialize the game
-function initGame(){
-  fillGuessDropdowns();
-  // Generate secret
-  secret = [];
-  for(let i=0;i<L;i++){
-    secret.push(symbols[Math.floor(Math.random()*symbols.length)]);
-  }
-  generateAttempts();
-  displayAttempts();
-  document.getElementById('result').textContent = '';
-  console.log('Secret combo (for debugging):', secret);
+function showSecret(){
+  document.getElementById('result').textContent='💡 Secret: '+secret.join(' ');
 }
 
-// Initialize max selectors and start game
-initMaxSelectors();
-initGame();
+function checkAllSolutions(){
+  const all = allCombinations();
+  let poss=[...all];
+  attempts.forEach(a=>{
+    poss = filterSolutions(a[0],a[1],poss);
+  });
+  document.getElementById('possibleList').textContent=`Possible secrets (${poss.length}):\n`+poss.map(p=>p.join(' ')).join('\n');
+}
 
+generateGame();
 </script>
 </body>
 </html>
